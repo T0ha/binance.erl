@@ -1,0 +1,19 @@
+{application, poloniex,
+ [{description, "An OTP application"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, { poloniex_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    cowlib,
+    lager,
+    gun
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, []},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
