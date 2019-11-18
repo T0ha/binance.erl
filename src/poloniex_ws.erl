@@ -27,12 +27,6 @@
          code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(HEATBREAT_TIMEOUT, 2000).
-
--record(state, {
-          connection,
-          ref
-         }).
 
 %%%===================================================================
 %%% API
@@ -70,7 +64,7 @@ init([]) ->
     lager:info("Starting ~p", [?MODULE]),
     poloniex_pairs = ets:new(poloniex_pairs, [named_table, ordered_set, {keypos, 2}, public]),
     {ok, 
-     #state{
+     #connection{
             connection = Connection
            },
     ?HEATBREAT_TIMEOUT}.
@@ -103,7 +97,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({subscribe, Pair}, #state{connection = Connection} = State) ->
+handle_cast({subscribe, Pair}, #connection{connection = Connection} = State) ->
     Subscribe = #{
       command => <<"subscribe">>,
       channel => Pair
@@ -123,20 +117,20 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({gun_up, Connection, http}, #state{connection = Connection} = State) ->
+handle_info({gun_up, Connection, http}, #connection{connection = Connection} = State) ->
     lager:info("HTTP connected ~p", [Connection]),
     Ref = gun:ws_upgrade(Connection, "/"),
-    {noreply, State#state{ref = Ref}, ?HEATBREAT_TIMEOUT};
+    {noreply, State#connection{ref = Ref}, ?HEATBREAT_TIMEOUT};
 handle_info({gun_upgrade, Connection, Ref, _Protocols, _Headers},
-            #state{connection = Connection} = State) ->
+            #connection{connection = Connection} = State) ->
     lager:info("WS connected ~p", [Ref]),
-    {noreply, State#state{ref = Ref}, ?HEATBREAT_TIMEOUT};
+    {noreply, State#connection{ref = Ref}, ?HEATBREAT_TIMEOUT};
 handle_info({gun_ws, Connection, Ref, {text, <<"[1010]">>}},
-            #state{connection = Connection, ref = Ref} = State) ->
+            #connection{connection = Connection, ref = Ref} = State) ->
     lager:debug("Heatbreat"),
     {noreply, State, ?HEATBREAT_TIMEOUT};
 handle_info({gun_ws, Connection, Ref, {text, Data}},
-            #state{
+            #connection{
                connection = Connection,
                ref = Ref
               } = State) ->

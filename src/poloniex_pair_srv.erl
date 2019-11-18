@@ -15,7 +15,9 @@
 -export([
          start_link/1,
          update/1,
-         pair_to_srv_name/1
+         pair_to_srv_name/1,
+         asks/1, asks/2,
+         bids/1, bids/2
         ]).
 
 %% gen_server callbacks
@@ -57,9 +59,19 @@ pair_to_srv_name(Pair) ->
     list_to_atom(
       binary_to_list(<<"poloniex_", Pair/bytes>>)).
 
+asks(Pair) ->
+    asks(Pair, 5).
 
-                     
+asks(Pair, Limit) ->
+    Id = pair_to_srv_name(Pair),
+    gen_server:call(Id, {asks, Limit}).
 
+bids(Pair) ->
+    bids(Pair, 5).
+
+bids(Pair, Limit) ->
+    Id = pair_to_srv_name(Pair),
+    gen_server:call(Id, {bids, Limit}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -99,6 +111,22 @@ init([Pair]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({asks, Limit}, _From, #state{asks = AsksEts} = State) ->
+    Reply = case ets:select(AsksEts, [{'_', [], ['$_']}], Limit) of
+                '$end_of_table' ->
+                    [];
+                {Asks, _} ->
+                    Asks
+            end,
+    {reply, Reply, State};
+handle_call({bids, Limit}, _From, #state{bids = BidsEts} = State) ->
+    Reply = case ets:select_reverse(BidsEts, [{'_', [], ['$_']}], Limit) of
+                '$end_of_table' ->
+                    [];
+                {Bids, _} ->
+                    Bids
+            end,
+    {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -179,9 +207,13 @@ handle_depth_command({PCode, [<<"i">>, [{<<"currencyPair">>, Pair}, {<<"orderBoo
     lager:info("Max bid: ~p Min ask: ~p", [hd(Bids), hd(Asks)]),
     ets:insert(AsksEts, Asks),
     ets:insert(BidsEts, Bids),
-    {noreply, State};
-handle_depth_command({_PCode, [<<"o">>, 0, PriceB, VolumeB]},
-                     #state{pair = Pair, asks = AsksEts} = State) ->
+    {noreply, State#state{code = PCode}};
+handle_depth_command({PCode, [<<"o">>, 0, PriceB, VolumeB]},
+                     #state{
+                        pair = Pair,
+                        code = PCode,
+                        asks = AsksEts
+                       } = State) ->
     lager:info("Asks update for ~p price ~p volume ~p", [Pair, PriceB, VolumeB]),
     Price = binary_to_float(PriceB),
     case binary_to_float(VolumeB) of
@@ -192,8 +224,12 @@ handle_depth_command({_PCode, [<<"o">>, 0, PriceB, VolumeB]},
             ets:insert(AsksEts, {Price, Volume}),
             {noreply, State}
     end;
-handle_depth_command({_PCode, [<<"o">>, 1, PriceB, VolumeB]},
-                     #state{pair = Pair, bids = BidsEts} = State) ->
+handle_depth_command({PCode, [<<"o">>, 1, PriceB, VolumeB]},
+                     #state{
+                        pair = Pair,
+                        code = PCode,
+                        bids = BidsEts
+                       } = State) ->
     lager:info("Bids update for ~p  price ~p volume ~p", [Pair, PriceB, VolumeB]),
     Price = binary_to_float(PriceB),
     case binary_to_float(VolumeB) of
