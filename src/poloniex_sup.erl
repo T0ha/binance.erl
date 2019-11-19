@@ -63,6 +63,8 @@ init([]) ->
     Children = [
               {'poloniex_pair_sup', {'poloniex_pair_sup', start_link, []},
               Restart, Shutdown, supervisor, ['poloniex_pair_sup']},
+              {'http_public', {'poloniex_http_public', start_link, []},
+              Restart, Shutdown, Type, ['poloniex_http_public']},
               {'ws', {'poloniex_ws', start_link, []},
               Restart, Shutdown, Type, ['poloniex_ws']}
                ],
