@@ -14,9 +14,12 @@
 %% API
 -export([
          start_link/0,
-         balances/0
-         %order_book/1, order_book/2,
-         %trade_history/1, trade_history/3,
+         balances/0,
+         open_orders/0,
+         open_orders/1,
+         order_status/1,
+         buy/3,
+         sell/3
         ]).
 
 %% gen_server callbacks
@@ -46,6 +49,37 @@ start_link() ->
 
 balances() ->
     gen_server:call(?SERVER, {post, ?BALANCES, []}).
+
+open_orders() ->
+    open_orders(<<"all">>).
+
+open_orders(Pair) ->
+    gen_server:call(?SERVER, {post, ?OPEN_ORDERS, [{"currencyPair", Pair}]}).
+
+order_status(OrderId) ->
+    gen_server:call(?SERVER, {post, ?ORDER_STATUS, [{"orderId", OrderId}]}).
+
+buy(Pair, Price, Amount) when is_float(Price) ->
+    buy(Pair, float_to_binary(Price), Amount);
+buy(Pair, Price, Amount) when is_float(Amount) ->
+    buy(Pair, Price, float_to_binary(Amount));
+buy(Pair, Price, Amount) ->
+    gen_server:call(?SERVER, {post, ?BUY, [
+                                           {"price", Price},
+                                           {"amount", Amount},
+                                           {"pair", Pair}
+                                          ]}).
+
+sell(Pair, Price, Amount) when is_float(Price) ->
+    sell(Pair, float_to_binary(Price), Amount);
+sell(Pair, Price, Amount) when is_float(Amount) ->
+    sell(Pair, Price, float_to_binary(Amount));
+sell(Pair, Price, Amount) ->
+    gen_server:call(?SERVER, {post, ?SELL, [
+                                           {"price", Price},
+                                           {"amount", Amount},
+                                           {"pair", Pair}
+                                          ]}).
 
 %%%===================================================================
 %%% gen_server callbacks

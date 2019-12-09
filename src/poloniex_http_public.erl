@@ -239,4 +239,4 @@ api_url(Endpoint) ->
 
 api_url(Endpoint, Params) ->
     Query = uri_string:compose_query([{"command", Endpoint} | Params]),
-    "/public?" ++ Query.
+    ?PUBLIC_PATH ++ Query.

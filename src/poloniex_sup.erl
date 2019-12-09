@@ -65,8 +65,10 @@ init([]) ->
               Restart, Shutdown, supervisor, ['poloniex_pair_sup']},
               {'http_public', {'poloniex_http_public', start_link, []},
               Restart, Shutdown, Type, ['poloniex_http_public']},
-              {'ws', {'poloniex_ws', start_link, []},
-              Restart, Shutdown, Type, ['poloniex_ws']}
+              {'http_private', {'poloniex_http_private', start_link, []},
+              Restart, Shutdown, Type, ['poloniex_http_private']}
+              %{'ws', {'poloniex_ws', start_link, []},
+              %Restart, Shutdown, Type, ['poloniex_ws']}
                ],
 
     {ok, {SupFlags, Children}}.
