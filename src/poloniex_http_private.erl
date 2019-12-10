@@ -57,28 +57,28 @@ open_orders(Pair) ->
     gen_server:call(?SERVER, {post, ?OPEN_ORDERS, [{"currencyPair", Pair}]}).
 
 order_status(OrderId) ->
-    gen_server:call(?SERVER, {post, ?ORDER_STATUS, [{"orderId", OrderId}]}).
+    gen_server:call(?SERVER, {post, ?ORDER_STATUS, [{"orderNumber", OrderId}]}).
 
 buy(Pair, Price, Amount) when is_float(Price) ->
-    buy(Pair, float_to_binary(Price), Amount);
+    buy(Pair, float_to_bin(Price), Amount);
 buy(Pair, Price, Amount) when is_float(Amount) ->
-    buy(Pair, Price, float_to_binary(Amount));
+    buy(Pair, Price, float_to_bin(Amount));
 buy(Pair, Price, Amount) ->
     gen_server:call(?SERVER, {post, ?BUY, [
-                                           {"price", Price},
+                                           {"rate", Price},
                                            {"amount", Amount},
-                                           {"pair", Pair}
+                                           {"currencyPair", Pair}
                                           ]}).
 
 sell(Pair, Price, Amount) when is_float(Price) ->
-    sell(Pair, float_to_binary(Price), Amount);
+    sell(Pair, float_to_bin(Price), Amount);
 sell(Pair, Price, Amount) when is_float(Amount) ->
-    sell(Pair, Price, float_to_binary(Amount));
+    sell(Pair, Price, float_to_bin(Amount));
 sell(Pair, Price, Amount) ->
     gen_server:call(?SERVER, {post, ?SELL, [
-                                           {"price", Price},
+                                           {"rate", Price},
                                            {"amount", Amount},
-                                           {"pair", Pair}
+                                           {"currencyPair", Pair}
                                           ]}).
 
 %%%===================================================================
@@ -249,8 +249,11 @@ api_url(Endpoint, Params) ->
 headers(QS, Headers, Secret) ->
     [{<<"Sign">>, sign(QS, Secret)} | Headers].
 
-sign(Data, Secret) -> % {{{2
+sign(Data, Secret) ->
     bin_to_hexstr(crypto:hmac(sha512, Secret, Data)).
 
-bin_to_hexstr(Data) -> % {{{2
+bin_to_hexstr(Data) ->
         lists:flatten([io_lib:format("~2.16.0b", [B]) || <<B>> <= Data]).
+
+float_to_bin(Float) ->
+    float_to_binary(Float, [{decimals, 10}, compact]).

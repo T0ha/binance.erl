@@ -135,7 +135,7 @@ init([]) ->
 handle_call({get, Endpoint, Params}, _From, #connection{connection = Connection} = State) ->
     Ref = gun:get(Connection, api_url(Endpoint, Params)),
     {response, nofin, 200, _Headers} = gun:await(Connection, Ref),
-    {ok, Data} = gun:await_body(Connection, Ref),
+    {ok, Data} = gun:await_body(Connection, Ref, 300000),
     Json = jsx:decode(Data),
     {reply, Json, State};
 handle_call(_Request, _From, State) ->
@@ -239,4 +239,4 @@ api_url(Endpoint) ->
 
 api_url(Endpoint, Params) ->
     Query = uri_string:compose_query([{"command", Endpoint} | Params]),
-    ?PUBLIC_PATH ++ Query.
+    ?PUBLIC_PATH ++ "?" ++ Query.
