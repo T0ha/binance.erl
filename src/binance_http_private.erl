@@ -6,10 +6,10 @@
 %%% @end
 %%% Created : 2019-11-18 13:25:35.910979
 %%%-------------------------------------------------------------------
--module(poloniex_http_private).
+-module(binance_http_private).
 
 -behaviour(gen_server).
--include("poloniex.hrl").
+-include("binance.hrl").
 
 %% API
 -export([
@@ -98,8 +98,8 @@ sell(Pair, Price, Amount) ->
 %%--------------------------------------------------------------------
 init([]) ->
     {ok, Connection} = connect(),
-    Key = application:get_env(poloniex, key, <<>>),
-    Secret = application:get_env(poloniex, secret, <<>>),
+    Key = application:get_env(binance, key, <<>>),
+    Secret = application:get_env(binance, secret, <<>>),
 
 
     lager:info("Starting ~p", [?MODULE]),
@@ -137,7 +137,7 @@ handle_call({post, Method, Params},
               } = State) ->
     QS = api_url(Method, Params),
     lager:debug("QS: ~p", [QS]),
-    Ref = gun:post(Connection, ?PRIVATE_PATH, headers(QS, Headers, Secret), QS),
+    Ref = gun:post(Connection, "?PRIVATE_PATH", headers(QS, Headers, Secret), QS),
     {response, nofin, 200, _Headers} = gun:await(Connection, Ref),
     {ok, Data} = gun:await_body(Connection, Ref),
     Json = jsx:decode(Data),

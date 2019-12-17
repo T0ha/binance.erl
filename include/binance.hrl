@@ -1,16 +1,12 @@
 % General defaults
 -define(HEATBREAT_TIMEOUT, 2000).
--define(HOST, "poloniex.com").
+-define(HOST, "api.binance.com").
 %
-% API Paths
--define(PUBLIC_PATH, "/public").
--define(PRIVATE_PATH, "/tradingApi").
-
 % API endpoints
 % Public
--define(TICKER, "returnTicker").
+-define(TICKER, "/api/v3/ticker/price").
 -define(VOL24, "return24hVolume").
--define(ORDER_BOOK, "returnOrderBook").
+-define(ORDER_BOOK, "/api/v3/depth").
 -define(TRADE_HISTORY, "returnTradeHistory").
 -define(CHART_DATA, "returnChartData").
 -define(CURRENCIES, "returnCurrencies").

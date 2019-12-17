@@ -1,9 +1,9 @@
 %%%-------------------------------------------------------------------
-%% @doc poloniex public API
+%% @doc binance public API
 %% @end
 %%%-------------------------------------------------------------------
 
--module(poloniex_app).
+-module(binance_app).
 
 -behaviour(application).
 
@@ -15,7 +15,7 @@
 %%====================================================================
 
 start(_StartType, _StartArgs) ->
-    poloniex_sup:start_link().
+    binance_sup:start_link().
 
 %%--------------------------------------------------------------------
 stop(_State) ->

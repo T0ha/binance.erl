@@ -6,12 +6,17 @@
 %%% @end
 %%% Created : 2019-10-09 18:56:41.071742
 %%%-------------------------------------------------------------------
--module(poloniex_depth).
+-module(binance_ws).
 
 -behaviour(gen_server).
 
+-include("binance.hrl").
+
 %% API
--export([start_link/0]).
+-export([
+         start_link/0,
+         subscribe/1
+        ]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -22,13 +27,6 @@
          code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(HEATBREAT_TIMEOUT, 2000).
-
--record(state, {
-          pair = <<"BTC_EOS">>,
-          connection,
-          ref
-         }).
 
 %%%===================================================================
 %%% API
@@ -44,6 +42,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+subscribe(Pair) ->
+    gen_server:cast(?SERVER, {subscribe, Pair}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -60,12 +60,13 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, Connection} = gun:open("api2.poloniex.com", 443, #{protocols => [http]}),
+    {ok, Connection} = gun:open("stream.binance.com", 9443, #{
+                                  protocols => [http],
+                                  transport => tls
+                                 }),
     lager:info("Starting ~p", [?MODULE]),
-    ets:new(asks, [ordered_set, named_table]),
-    ets:new(bids, [ordered_set, named_table]),
     {ok, 
-     #state{
+     #connection{
             connection = Connection
            },
     ?HEATBREAT_TIMEOUT}.
@@ -98,6 +99,14 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({subscribe, Pair}, #connection{connection = Connection} = State) ->
+    Subscribe = #{
+      id => 1,
+      method => <<"SUBSCRIBE">>,
+      params => [ <<Pair/bytes, "@depth@100ms">> ]
+     },
+    gun:ws_send(Connection, {text, jsx:encode(Subscribe)}),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -111,32 +120,26 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({gun_up, Connection, http}, #state{connection = Connection} = State) ->
+handle_info({gun_up, Connection, http}, #connection{connection = Connection} = State) ->
     lager:info("HTTP connected ~p", [Connection]),
-    Ref = gun:ws_upgrade(Connection, "/"),
-    {noreply, State#state{ref = Ref}, ?HEATBREAT_TIMEOUT};
+    Ref = gun:ws_upgrade(Connection, "/ws"),
+    {noreply, State#connection{ref = Ref}, ?HEATBREAT_TIMEOUT};
 handle_info({gun_upgrade, Connection, Ref, _Protocols, _Headers},
-            #state{connection = Connection, pair = Pair} = State) ->
+            #connection{connection = Connection} = State) ->
     lager:info("WS connected ~p", [Ref]),
-    Subscribe = #{
-      command => <<"subscribe">>,
-      channel => Pair
-     },
-    gun:ws_send(Connection, {text, jsx:encode(Subscribe)}),
-    {noreply, State#state{ref = Ref}, ?HEATBREAT_TIMEOUT};
+    {noreply, State#connection{ref = Ref}, ?HEATBREAT_TIMEOUT};
 handle_info({gun_ws, Connection, Ref, {text, <<"[1010]">>}},
-            #state{connection = Connection, ref = Ref} = State) ->
+            #connection{connection = Connection, ref = Ref} = State) ->
     lager:debug("Heatbreat"),
     {noreply, State, ?HEATBREAT_TIMEOUT};
 handle_info({gun_ws, Connection, Ref, {text, Data}},
-            #state{
+            #connection{
                connection = Connection,
-               ref = Ref,
-               pair = Pair
+               ref = Ref
               } = State) ->
-    lager:debug("Received data for ~p: ~p", [Pair, Data]),
-    Json = jsx:decode(Data),
-    handle_depth_data(Pair, Json),
+    lager:debug("Received data: ~p", [Data]),
+    Json = jsx:decode(Data, [return_maps]),
+    binance_pair_srv:update(Json),
     {noreply, State, ?HEATBREAT_TIMEOUT};
 handle_info(timeout, State) ->
     lager:debug("Timeout"),
@@ -173,41 +176,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-handle_depth_data(Pair, [PCode, Sequence, Commands]) ->
-    [ handle_depth_command(Pair, Command) || Command <- Commands].
-
-handle_depth_command(Pair, [<<"i">>, [_, {<<"orderBook">>, [Ask, Bid]}]]) ->
-    lager:debug("Bids: ~p~nAsks: ~p~n", [Bid, Ask]),
-    Bids = [ {binary_to_float(P), binary_to_float(V)} || {P, V} <- Bid],
-    Asks = [ {binary_to_float(P), binary_to_float(V)} || {P, V} <- Ask],
-    lager:info("Max bid: ~p Min ask: ~p", [hd(Bids), hd(Asks)]),
-    ets:insert(asks, Asks),
-    ets:insert(bids, Bids);
-handle_depth_command(Pair, [<<"o">>, 0, PriceB, VolumeB]) ->
-    lager:info("Asks update for ~p price ~p volume ~p", [Pair, PriceB, VolumeB]),
-    Price = binary_to_float(PriceB),
-    case binary_to_float(VolumeB) of
-        0.0 ->
-            ets:delete(asks, Price);
-        Volume ->
-            ets:insert(asks, {Price, Volume})
-    end;
-handle_depth_command(Pair, [<<"o">>, 1, PriceB, VolumeB]) ->
-    lager:info("Bids update for ~p  price ~p volume ~p", [Pair, PriceB, VolumeB]),
-    Price = binary_to_float(PriceB),
-    case binary_to_float(VolumeB) of
-        0.0 ->
-            ets:delete(bids, Price);
-        Volume ->
-            ets:insert(bids, {Price, Volume})
-    end;
-handle_depth_command(Pair, [<<"t">>, _Id, 0, PriceB, VolumeB, _Timestamp]) ->
-    lager:debug("Sell transaction for ~p price ~p volume ~p", [Pair, PriceB, VolumeB]);
-handle_depth_command(Pair, [<<"t">>, _Id, 1, PriceB, VolumeB, _Timestamp]) ->
-    lager:debug("Buy transaction for ~p price ~p volume ~p", [Pair, PriceB, VolumeB]);
-handle_depth_command(Pair, Command) ->
-    lager:warning("Unknown command for pair ~p: ~p", [Pair, Command]).
-
-
-
-

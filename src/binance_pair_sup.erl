@@ -4,9 +4,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 2019-10-09 19:22:03.652863
+%%% Created : 2019-11-06 13:00:29.308723
 %%%-------------------------------------------------------------------
--module(poloniex_sup).
+-module(binance_pair_sup).
 
 -behaviour(supervisor).
 
@@ -60,28 +60,17 @@ init([]) ->
     Shutdown = 2000,
     Type = worker,
 
-    Children = [
-              {'poloniex_pair_sup', {'poloniex_pair_sup', start_link, []},
-              Restart, Shutdown, supervisor, ['poloniex_pair_sup']},
+    Pairs = application:get_env(binance, pairs, []),
 
-              {'http_public', {'poloniex_http_public', start_link, []},
-              Restart, Shutdown, Type, ['poloniex_http_public']},
-
-              {'http_private', {'poloniex_http_private', start_link, []},
-              Restart, Shutdown, Type, ['poloniex_http_private']},
-
-              {'poloniex', {'poloniex', start_link, []},
-              Restart, Shutdown, Type, ['poloniex']},
-
-              {'ws', {'poloniex_ws', start_link, []},
-              Restart, Shutdown, Type, ['poloniex_ws']}
-               ],
+    Children = lists:map(fun(Pair) ->
+                                 Id = binance_pair_srv:pair_to_srv_name(Pair),
+                                 {Id, {'binance_pair_srv', start_link, [Pair]},
+                                  Restart, Shutdown, Type, ['binance_pair_srv']}
+                         end,
+                         Pairs),
 
     {ok, {SupFlags, Children}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-

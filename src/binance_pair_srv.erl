@@ -6,10 +6,10 @@
 %%% @end
 %%% Created : 2019-11-06 12:29:34.828589
 %%%-------------------------------------------------------------------
--module(poloniex_pair_srv).
+-module(binance_pair_srv).
 
 -behaviour(gen_server).
--include("poloniex.hrl").
+-include("binance.hrl").
 
 %% API
 -export([
@@ -32,7 +32,7 @@
 
 -record(state, {
           pair :: binary(),
-          code :: pos_integer(),
+          last_update = 1 :: pos_integer(),
           asks :: pid(),
           bids :: pid(),
           best_ask :: float(),
@@ -54,14 +54,15 @@ start_link(Pair) ->
     Id = pair_to_srv_name(Pair),
     gen_server:start_link({local, Id}, ?MODULE, [Pair], []).
 
-update([PCode, _Sequence, Commands]) ->
-    [ send_or_broadcast(PCode, {PCode, Command}) || Command <- Commands];
+update(#{ <<"s">> := Pair } = Data) ->
+    gen_server:cast(pair_to_srv_name(Pair), Data);
 update(Msg) ->
     lager:warning("Received unknown message from WS ~p", [Msg]).
 
 pair_to_srv_name(Pair) ->
     list_to_atom(
-      binary_to_list(<<"poloniex_", Pair/bytes>>)).
+      string:lowercase(
+        binary_to_list(<<"binance_", Pair/bytes>>))).
 
 asks(Pair) ->
     asks(Pair, 5).
@@ -145,10 +146,9 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(Cmd, #state{pair = Pair} = State) ->
-    handle_depth_command(Cmd, State);
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(Cmd, State) ->
+    lager:info("Pair upd: ~p", [Cmd]),
+    handle_depth_command(Cmd, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -161,7 +161,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, #state{pair = Pair} = State) ->
-    poloniex_ws:subscribe(Pair),
+    binance_ws:subscribe(Pair),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -194,92 +194,53 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-handle_depth_command({PCode, [<<"i">>, [{<<"currencyPair">>, Pair}, {<<"orderBook">>, [Ask, Bid]}]]},
+handle_depth_command(#{<<"s">> := Pair,
+                       <<"b">> := Bids,
+                       <<"a">> := Asks,
+                       <<"U">> := First,
+                       <<"u">> := Last
+                      } = Update,
                      #state{
+                        %pair = Pair,
+                        last_update = LU,
                         asks = AsksEts,
-                        pair = Pair,
-                        bids = BidsEts
-                       } = State) ->
-    lager:debug("Bids: ~p~nAsks: ~p~n", [Bid, Ask]),
-    ets:insert(poloniex_pairs, [#pair{
-                                   code = PCode,
-                                   pair = Pair,
-                                   pid = self()
-                                  }]),
-    Bids = [ {binary_to_float(P), binary_to_float(V)} || {P, V} <- Bid],
-    Asks = [ {binary_to_float(P), binary_to_float(V)} || {P, V} <- Ask],
-    lager:debug("Max bid: ~p Min ask: ~p", [hd(Bids), hd(Asks)]),
-    ets:insert(AsksEts, Asks),
-    ets:insert(BidsEts, Bids),
-    {noreply, State#state{
-                code = PCode,
-                best_ask = element(1, hd(Asks)),
-                best_bid = element(1, hd(Bids))
-               }};
-handle_depth_command({_PCode, [<<"i">>, [{<<"currencyPair">>, Pair}, _]]},
-                     #state{
-                        pair = OurPair
-                       } = State) when Pair /= OurPair ->
-    {noreply, State};
-handle_depth_command({PCode, [<<"o">>, 0, Price, Volume]},
-                     #state{
-                        pair = Pair,
-                        code = PCode,
-                        asks = AsksEts,
-                        best_ask = BestPrice
-                       } = State) ->
-    lager:debug("Asks update for ~p price ~p volume ~p", [Pair, Price, Volume]),
-    update_depth(AsksEts, Price, Volume),
-    case ets:first(AsksEts) of
-        BestPrice ->
-            {noreply, State};
-        NewBest ->
-            poloniex:best_ask_updated(Pair, NewBest),
-            {noreply, State#state{best_ask = NewBest}}
+                        bids = BidsEts,
+                        best_bid = BestBid,
+                        best_ask = BestAsk
+                       } = State) when %LU + 1 >= First, 
+                                       LU + 1 =< Last ->
+    lager:debug("Depth update for ~p: ~p", [Pair, Update]),
+    lists:foreach(fun([Price, Volume]) ->
+                          update_depth(AsksEts, Price, Volume)
+                  end,
+                  Asks),
+    lists:foreach(fun([Price, Volume]) ->
+                          update_depth(BidsEts, Price, Volume)
+                  end,
+                  Bids),
+
+    StateUpd = State#state{last_update = Last},
+
+    case {ets:first(AsksEts), ets:last(BidsEts)} of
+        {BestAsk, BestBid} ->
+            {noreply, StateUpd};
+        {BestAsk, NewBest} ->
+            binance:best_bid_updated(Pair, NewBest),
+            {noreply, StateUpd#state{best_bid = NewBest}};
+        {NewBest, BestBid} ->
+            binance:best_ask_updated(Pair, NewBest),
+            {noreply, StateUpd#state{best_ask = NewBest}};
+        {NewAsk, NewBid} ->
+            binance:best_bid_updated(Pair, NewBid),
+            binance:best_ask_updated(Pair, NewAsk),
+            {noreply, StateUpd#state{
+                        best_ask = NewAsk,
+                        best_bid = NewBid
+                       }}
     end;
-handle_depth_command({PCode, [<<"o">>, 1, Price, Volume]},
-                     #state{
-                        pair = Pair,
-                        code = PCode,
-                        best_bid = BestPrice,
-                        bids = BidsEts
-                       } = State) ->
-    lager:debug("Bids update for ~p  price ~p volume ~p", [Pair, Price, Volume]),
-    update_depth(BidsEts, Price, Volume),
-    case ets:last(BidsEts) of
-        BestPrice ->
-            {noreply, State};
-        NewBest ->
-            poloniex:best_bid_updated(Pair, NewBest),
-            {noreply, State#state{best_bid = NewBest}}
-    end;
-handle_depth_command({_PCode, [<<"t">>, _Id, 0, PriceB, VolumeB, _Timestamp]},
-                     #state{pair= Pair} = State) ->
-    lager:info("Sell transaction for ~p price ~p volume ~p", [Pair, PriceB, VolumeB]),
-    {noreply, State};
-handle_depth_command({_PCode, [<<"t">>, _Id, 1, PriceB, VolumeB, _Timestamp]},
-                     #state{pair= Pair} = State) ->
-    lager:info("Buy transaction for ~p price ~p volume ~p", [Pair, PriceB, VolumeB]),
-    {noreply, State};
-handle_depth_command({PCode, _},
-                     #state{
-                        code = OurPCode
-                       } = State) when PCode /= OurPCode ->
-    {noreply, State};
 handle_depth_command(Command, #state{pair= Pair} = State) ->
     lager:warning("Unknown command for pair ~p: ~p", [Pair, Command]),
     {noreply, State}.
-
-send_or_broadcast(PCode, Data) ->
-    case ets:lookup(poloniex_pairs, PCode) of
-        [] -> 
-            lists:foreach(fun({_, Pid, _, _}) ->
-                                  gen_server:cast(Pid, Data)
-                          end,
-                          supervisor:which_children(poloniex_pair_sup));
-        [#pair{pid = Pid}] ->
-            gen_server:cast(Pid, Data)
-    end.
 
 update_depth(Table, Price, Volume) when is_binary(Price) ->
     update_depth(Table, binary_to_float(Price), Volume);

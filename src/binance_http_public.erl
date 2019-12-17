@@ -1,21 +1,25 @@
 %%%-------------------------------------------------------------------
-%%% @author Anton Shvein
-%%% @copyright (C) 2019, 3∑
+%%% @author ins
+%%% @copyright (C) 2019, ins
 %%% @doc
 %%%
 %%% @end
-%%% Created : 2019-10-09 18:56:41.071742
+%%% Created : 2019-11-18 13:25:35.910979
 %%%-------------------------------------------------------------------
--module(poloniex_ws).
+-module(binance_http_public).
 
 -behaviour(gen_server).
-
--include("poloniex.hrl").
+-include("binance.hrl").
 
 %% API
 -export([
          start_link/0,
-         subscribe/1
+         ticker/0,
+         vol24/0,
+         order_book/1, order_book/2,
+         trade_history/1, trade_history/3,
+         chart_data/4,
+         currencies/0
         ]).
 
 %% gen_server callbacks
@@ -27,6 +31,7 @@
          code_change/3]).
 
 -define(SERVER, ?MODULE).
+
 
 %%%===================================================================
 %%% API
@@ -42,8 +47,54 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-subscribe(Pair) ->
-    gen_server:cast(?SERVER, {subscribe, Pair}).
+ticker() ->
+    gen_server:call(?SERVER, {get, ?TICKER, []}).
+
+vol24() ->
+    gen_server:call(?SERVER, {get, ?VOL24, []}).
+
+order_book(Pair) ->
+    order_book(Pair, 50).
+
+order_book(Pair, Depth) when is_integer(Depth) ->
+    order_book(Pair, integer_to_binary(Depth));
+order_book(Pair, Depth) ->
+    gen_server:call(?SERVER, {get, ?ORDER_BOOK, [
+                                                 {"symbol", Pair},
+                                                 {"limit", Depth}
+                                                ]}).
+
+trade_history(Pair) ->
+    gen_server:call(?SERVER, {get, ?TRADE_HISTORY, [
+                                                    {"symbol", Pair}
+                                                   ]}).
+trade_history(Pair, Start, End) when is_integer(Start) ->
+    trade_history(Pair, integer_to_binary(Start), End);
+trade_history(Pair, Start, End) when is_integer(End) ->
+    trade_history(Pair, Start, integer_to_binary(End));
+trade_history(Pair, Start, End) ->
+    gen_server:call(?SERVER, {get, ?TRADE_HISTORY, [
+                                                    {"symbol", Pair},
+                                                    {"start", Start},
+                                                    {"end", End}
+                                                   ]}).
+
+chart_data(Pair, Period, Start, End) when is_integer(Period) ->
+    chart_data(Pair, integer_to_binary(Period), Start, End);
+chart_data(Pair, Period, Start, End) when is_integer(Start) ->
+    chart_data(Pair, Period, integer_to_binary(Start), End);
+chart_data(Pair, Period, Start, End) when is_integer(End) ->
+    chart_data(Pair, Period, Start, integer_to_binary(End));
+chart_data(Pair, Period, Start, End) ->
+    gen_server:call(?SERVER, {get, ?CHART_DATA, [
+                                                    {"symbol", Pair},
+                                                    {"period", Period},
+                                                    {"start", Start},
+                                                    {"end", End}
+                                                   ]}).
+currencies() ->
+    gen_server:call(?SERVER, {get, ?CURRENCIES, []}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -60,14 +111,12 @@ subscribe(Pair) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, Connection} = gun:open("api2.poloniex.com", 443, #{protocols => [http]}),
+    {ok, Connection} = connect(),
     lager:info("Starting ~p", [?MODULE]),
-    poloniex_pairs = ets:new(poloniex_pairs, [named_table, ordered_set, {keypos, 2}, public]),
     {ok, 
      #connection{
             connection = Connection
-           },
-    ?HEATBREAT_TIMEOUT}.
+           }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -83,6 +132,12 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({get, Endpoint, Params}, _From, #connection{connection = Connection} = State) ->
+    Ref = gun:get(Connection, api_url(Endpoint, Params)),
+    {response, nofin, 200, _Headers} = gun:await(Connection, Ref),
+    {ok, Data} = gun:await_body(Connection, Ref, 300000),
+    Json = jsx:decode(Data),
+    {reply, Json, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -97,13 +152,6 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({subscribe, Pair}, #connection{connection = Connection} = State) ->
-    Subscribe = #{
-      command => <<"subscribe">>,
-      channel => Pair
-     },
-    gun:ws_send(Connection, {text, jsx:encode(Subscribe)}),
-    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -119,31 +167,40 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info({gun_up, Connection, http}, #connection{connection = Connection} = State) ->
     lager:info("HTTP connected ~p", [Connection]),
-    Ref = gun:ws_upgrade(Connection, "/"),
-    {noreply, State#connection{ref = Ref}, ?HEATBREAT_TIMEOUT};
-handle_info({gun_upgrade, Connection, Ref, _Protocols, _Headers},
+    {noreply, State};
+handle_info({gun_down, Connection, http, Reason, _KilledStreams},
             #connection{connection = Connection} = State) ->
-    lager:info("WS connected ~p", [Ref]),
-    {noreply, State#connection{ref = Ref}, ?HEATBREAT_TIMEOUT};
-handle_info({gun_ws, Connection, Ref, {text, <<"[1010]">>}},
-            #connection{connection = Connection, ref = Ref} = State) ->
-    lager:debug("Heatbreat"),
-    {noreply, State, ?HEATBREAT_TIMEOUT};
-handle_info({gun_ws, Connection, Ref, {text, Data}},
+    lager:info("Publick HTTP ~p disconnected with reason ~p, reconnecting", [Connection, Reason]),
+    %{ok, NewConnection} = connect(),
+    {noreply, State#connection{connection = Connection}};
+handle_info({gun_responce, Connection, Ref, fin, Status, Headers},
             #connection{
                connection = Connection,
-               ref = Ref
+               ref = Ref,
+               from = Pid
               } = State) ->
-    lager:debug("Received data: ~p", [Data]),
-    Json = jsx:decode(Data),
-    poloniex_pair_srv:update(Json),
-    {noreply, State, ?HEATBREAT_TIMEOUT};
-handle_info(timeout, State) ->
-    lager:debug("Timeout"),
-    {noreply, State, ?HEATBREAT_TIMEOUT};
+    lager:info("Empty HTTP responce recieved for ~p", [Ref]),
+    gen_server:reply(Pid, <<>>),
+    {noreply, State#connection{from = undefined, ref = undefined}};
+handle_info({gun_responce, Connection, Ref, nofin, Status, Headers},
+            #connection{
+               connection = Connection,
+               ref = Ref,
+               from = Pid
+              } = State) ->
+    lager:info("HTTP responce recieved for ~p", [Ref]),
+    {noreply, State};
+handle_info({gun_data, Connection, Ref, nofin, Status, Headers},
+            #connection{
+               connection = Connection,
+               ref = Ref,
+               from = Pid
+              } = State) ->
+    lager:info("HTTP responce recieved for ~p", [Ref]),
+    {noreply, State};
 handle_info(_Info, State) ->
-    lager:warning("Wrong message: ~p in module ~p", [_Info, ?MODULE]),
-    {noreply, State, ?HEATBREAT_TIMEOUT}.
+    lager:warning("Wrong message: ~p in module ~p state ~p", [_Info, ?MODULE, State]),
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -173,3 +230,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+connect() ->
+    lager:info("Connecting to ~s", [?HOST]),
+    gun:open(?HOST, 443, #{protocols => [http]}).
+
+api_url(Endpoint) ->
+    api_url(Endpoint, []).
+
+api_url(Endpoint, Params) ->
+    Query = uri_string:compose_query(Params),
+    Endpoint ++ "?" ++ Query.
