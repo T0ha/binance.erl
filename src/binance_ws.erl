@@ -43,7 +43,7 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 subscribe(Pair) ->
-    gen_server:cast(?SERVER, {subscribe, Pair}).
+    gen_server:cast(?SERVER, {subscribe, string:lowercase(Pair)}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================

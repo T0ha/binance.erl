@@ -147,7 +147,6 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast(Cmd, State) ->
-    lager:info("Pair upd: ~p", [Cmd]),
     handle_depth_command(Cmd, State).
 
 %%--------------------------------------------------------------------
@@ -160,9 +159,33 @@ handle_cast(Cmd, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(timeout, #state{pair = Pair} = State) ->
+handle_info(timeout, 
+            #state{
+               pair = Pair,
+               asks = AsksEts,
+               bids = BidsEts
+              } = State) ->
+    lager:debug("Subscribing to stream for pair: ~p", [Pair]),
     binance_ws:subscribe(Pair),
-    {noreply, State};
+    #{ <<"asks">> := Asks,
+       <<"bids">> := Bids,
+       <<"lastUpdateId">> := Last
+     } = binance_http_public:order_book(Pair, 1000),
+    lager:debug("Depth retrieved for ~p with lastUpdateId = ~p", [Pair, Last]),
+    lists:foreach(fun([Price, Volume]) ->
+                          update_depth(AsksEts, Price, Volume)
+                  end,
+                  Asks),
+    lists:foreach(fun([Price, Volume]) ->
+                          update_depth(BidsEts, Price, Volume)
+                  end,
+                  Bids),
+
+    {noreply, State#state{
+                last_update = Last,
+                best_ask = ets:first(AsksEts),
+                best_bid = ets:last(BidsEts)
+               }};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -201,13 +224,12 @@ handle_depth_command(#{<<"s">> := Pair,
                        <<"u">> := Last
                       } = Update,
                      #state{
-                        %pair = Pair,
                         last_update = LU,
                         asks = AsksEts,
                         bids = BidsEts,
                         best_bid = BestBid,
                         best_ask = BestAsk
-                       } = State) when %LU + 1 >= First, 
+                       } = State) when LU + 1 >= First, 
                                        LU + 1 =< Last ->
     lager:debug("Depth update for ~p: ~p", [Pair, Update]),
     lists:foreach(fun([Price, Volume]) ->

@@ -61,9 +61,6 @@ init([]) ->
     Type = worker,
 
     Children = [
-              %{'binance_pair_sup', {'binance_pair_sup', start_link, []},
-              %Restart, Shutdown, supervisor, ['binance_pair_sup']},
-
               {'http_public', {'binance_http_public', start_link, []},
               Restart, Shutdown, Type, ['binance_http_public']},
 
@@ -71,10 +68,13 @@ init([]) ->
               %Restart, Shutdown, Type, ['binance_http_private']},
 
               {'binance', {'binance', start_link, []},
-              Restart, Shutdown, Type, ['binance']}
+              Restart, Shutdown, Type, ['binance']},
 
-              %{'ws', {'binance_ws', start_link, []},
-              %Restart, Shutdown, Type, ['binance_ws']}
+              {'ws', {'binance_ws', start_link, []},
+              Restart, Shutdown, Type, ['binance_ws']},
+
+              {'binance_pair_sup', {'binance_pair_sup', start_link, []},
+              Restart, Shutdown, supervisor, ['binance_pair_sup']}
                ],
 
     {ok, {SupFlags, Children}}.

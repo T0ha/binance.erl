@@ -60,7 +60,7 @@ order_book(Pair, Depth) when is_integer(Depth) ->
     order_book(Pair, integer_to_binary(Depth));
 order_book(Pair, Depth) ->
     gen_server:call(?SERVER, {get, ?ORDER_BOOK, [
-                                                 {"symbol", Pair},
+                                                 {"symbol", string:uppercase(Pair)},
                                                  {"limit", Depth}
                                                 ]}).
 
@@ -136,7 +136,7 @@ handle_call({get, Endpoint, Params}, _From, #connection{connection = Connection}
     Ref = gun:get(Connection, api_url(Endpoint, Params)),
     {response, nofin, 200, _Headers} = gun:await(Connection, Ref),
     {ok, Data} = gun:await_body(Connection, Ref, 300000),
-    Json = jsx:decode(Data),
+    Json = jsx:decode(Data, [return_maps]),
     {reply, Json, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
