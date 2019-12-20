@@ -65,9 +65,12 @@ buy(Pair, Price, Amount) when is_float(Amount) ->
     buy(Pair, Price, float_to_bin(Amount));
 buy(Pair, Price, Amount) ->
     gen_server:call(?SERVER, {post, ?BUY, [
-                                           {"rate", Price},
-                                           {"amount", Amount},
-                                           {"currencyPair", Pair}
+                                           {"price", Price},
+                                           {"side", "BUY"},
+                                           {"type", "LIMIT"},
+                                           {"quantity", Amount},
+                                           {"timeInForce", "GTC"},
+                                           {"symbol", Pair}
                                           ]}).
 
 sell(Pair, Price, Amount) when is_float(Price) ->
@@ -76,9 +79,12 @@ sell(Pair, Price, Amount) when is_float(Amount) ->
     sell(Pair, Price, float_to_bin(Amount));
 sell(Pair, Price, Amount) ->
     gen_server:call(?SERVER, {post, ?SELL, [
-                                           {"rate", Price},
-                                           {"amount", Amount},
-                                           {"currencyPair", Pair}
+                                           {"price", Price},
+                                           {"side", "SELL"},
+                                           {"type", "LIMIT"},
+                                           {"quantity", Amount},
+                                           {"timeInForce", "GTC"},
+                                           {"symbol", Pair}
                                           ]}).
 
 %%%===================================================================
@@ -110,7 +116,7 @@ init([]) ->
             secret = Secret,
             headers = [
                        {<<"Content-Type">>, <<"application/x-www-form-urlencoded">>},
-                       {<<"Key">>, Key}
+                       {<<"X-MBX-APIKEY">>, Key}
                        ]
            }}.
 
@@ -135,10 +141,10 @@ handle_call({post, Method, Params},
                secret = Secret,
                headers = Headers
               } = State) ->
-    QS = api_url(Method, Params),
+    QS = api_url(Params, Secret),
     lager:debug("QS: ~p", [QS]),
-    Ref = gun:post(Connection, "?PRIVATE_PATH", headers(QS, Headers, Secret), QS),
-    {response, nofin, 200, _Headers} = gun:await(Connection, Ref),
+    Ref = gun:post(Connection, Method, Headers, QS),
+    {response, nofin, _, _Headers} = gun:await(Connection, Ref),
     {ok, Data} = gun:await_body(Connection, Ref),
     Json = jsx:decode(Data),
     {reply, Json, State};
@@ -236,21 +242,15 @@ connect() ->
     lager:info("Connecting to ~s", [?HOST]),
     gun:open(?HOST, 443, #{protocols => [http]}).
 
-api_url(Endpoint) ->
-    api_url(Endpoint, []).
-
-api_url(Endpoint, Params) ->
+api_url(Params, Secret) ->
     Query = uri_string:compose_query([
-                                      {"command", Endpoint},
-                                      {"nonce", integer_to_binary(erlang:system_time())}
+                                      {"timestamp", integer_to_binary(erlang:system_time(millisecond))}
                                       | Params]),
-    Query.
-
-headers(QS, Headers, Secret) ->
-    [{<<"Sign">>, sign(QS, Secret)} | Headers].
+    
+    Query ++ "&signature=" ++ sign(Query, Secret).
 
 sign(Data, Secret) ->
-    bin_to_hexstr(crypto:hmac(sha512, Secret, Data)).
+    bin_to_hexstr(crypto:hmac(sha256, Secret, Data)).
 
 bin_to_hexstr(Data) ->
         lists:flatten([io_lib:format("~2.16.0b", [B]) || <<B>> <= Data]).
