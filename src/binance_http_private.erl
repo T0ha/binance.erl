@@ -17,7 +17,7 @@
          balances/0,
          open_orders/0,
          open_orders/1,
-         order_status/1,
+         order_status/2,
          buy/3,
          sell/3
         ]).
@@ -48,16 +48,19 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 balances() ->
-    gen_server:call(?SERVER, {post, ?BALANCES, []}).
+    gen_server:call(?SERVER, {get, ?BALANCES, []}).
 
 open_orders() ->
-    open_orders(<<"all">>).
+    gen_server:call(?SERVER, {get, ?OPEN_ORDERS, []}).
 
 open_orders(Pair) ->
-    gen_server:call(?SERVER, {post, ?OPEN_ORDERS, [{"currencyPair", Pair}]}).
+    gen_server:call(?SERVER, {get, ?OPEN_ORDERS, [{"symbol", Pair}]}).
 
-order_status(OrderId) ->
-    gen_server:call(?SERVER, {post, ?ORDER_STATUS, [{"orderNumber", OrderId}]}).
+order_status(Pair, OrderId) ->
+    gen_server:call(?SERVER, {get, ?ORDER_STATUS, [
+                                                   {"orderId", OrderId},
+                                                   {"symbol", Pair}
+                                                  ]}).
 
 buy(Pair, Price, Amount) when is_float(Price) ->
     buy(Pair, float_to_bin(Price), Amount);
@@ -134,6 +137,20 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({get, Method, Params},
+            _From,
+            #connection{
+               connection = Connection,
+               secret = Secret,
+               headers = Headers
+              } = State) ->
+    QS = api_url(Params, Secret),
+    lager:debug("QS: ~p", [QS]),
+    Ref = gun:get(Connection, Method ++ "?" ++ QS, Headers),
+    {response, nofin, _, _Headers} = gun:await(Connection, Ref),
+    {ok, Data} = gun:await_body(Connection, Ref),
+    Json = jsx:decode(Data, [return_maps]),
+    {reply, Json, State};
 handle_call({post, Method, Params},
             _From,
             #connection{
@@ -146,7 +163,7 @@ handle_call({post, Method, Params},
     Ref = gun:post(Connection, Method, Headers, QS),
     {response, nofin, _, _Headers} = gun:await(Connection, Ref),
     {ok, Data} = gun:await_body(Connection, Ref),
-    Json = jsx:decode(Data),
+    Json = jsx:decode(Data, [return_maps]),
     {reply, Json, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -183,7 +200,7 @@ handle_info({gun_down, Connection, http, Reason, _KilledStreams},
     lager:info("Publick HTTP ~p disconnected with reason ~p, reconnecting", [Connection, Reason]),
     %{ok, NewConnection} = connect(),
     {noreply, State#connection{connection = Connection}};
-handle_info({gun_responce, Connection, Ref, fin, Status, Headers},
+handle_info({gun_responce, Connection, Ref, fin, _Status, _Headers},
             #connection{
                connection = Connection,
                ref = Ref,
@@ -192,7 +209,7 @@ handle_info({gun_responce, Connection, Ref, fin, Status, Headers},
     lager:info("Empty HTTP responce recieved for ~p", [Ref]),
     gen_server:reply(Pid, <<>>),
     {noreply, State#connection{from = undefined, ref = undefined}};
-handle_info({gun_responce, Connection, Ref, nofin, Status, Headers},
+handle_info({gun_responce, Connection, Ref, nofin, _Status, _Headers},
             #connection{
                connection = Connection,
                ref = Ref,
@@ -200,7 +217,7 @@ handle_info({gun_responce, Connection, Ref, nofin, Status, Headers},
               } = State) ->
     lager:info("HTTP responce recieved for ~p", [Ref]),
     {noreply, State};
-handle_info({gun_data, Connection, Ref, nofin, Status, Headers},
+handle_info({gun_data, Connection, Ref, nofin, _Status, _Headers},
             #connection{
                connection = Connection,
                ref = Ref,
