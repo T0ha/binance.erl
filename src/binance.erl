@@ -51,7 +51,17 @@ sell(Pair, Price, Amount) ->
     binance_http_private:sell(pair_to_binance(Pair), Price, Amount).
 
 balances() ->
-    binance_http_private:balances().
+    Balancies = binance_http_private:balances(),
+    lists:foldl(fun(#{<<"coin">> := Coin, 
+                      <<"free">> := Free,
+                      <<"locked">> := Locked},
+                    Acc) ->
+                        Acc#{Coin => #{<<"available">> => binary_to_float(Free),
+                                       <<"onOrders">> => binary_to_float(Locked)
+                                       }}
+                end,
+                #{},
+                Balancies).
 
 subscribe_pair(Pair) ->
     PairB = pair_to_binance(Pair),
@@ -63,5 +73,5 @@ subscribe_pair(Pair) ->
 %%% Internal functions
 %%%===================================================================
 pair_to_binance(Pair) ->
-    [From, To] = binary:split(<<"_">>),
+    [From, To] = binary:split(Pair, <<"_">>),
     <<To/bytes, From/bytes>>.
