@@ -100,7 +100,7 @@ init([Pair]) ->
             asks = ets:new(asks, [ordered_set]),
             bids = ets:new(bids, [ordered_set])
            }, 
-     2000}.
+     0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -247,14 +247,20 @@ handle_depth_command(#{<<"s">> := Pair,
         {BestAsk, BestBid} ->
             {noreply, StateUpd};
         {BestAsk, NewBest} ->
-            binance:best_bid_updated(Pair, NewBest),
+            Vol = ets:lookup_element(BidsEts, NewBest, 2),
+            cryptoring_amqp_exchange:publish_order_top(bid, Pair, NewBest, Vol),
             {noreply, StateUpd#state{best_bid = NewBest}};
         {NewBest, BestBid} ->
-            binance:best_ask_updated(Pair, NewBest),
+            Vol = ets:lookup_element(AsksEts, NewBest, 2),
+            cryptoring_amqp_exchange:publish_order_top(ask, Pair, NewBest, Vol),
             {noreply, StateUpd#state{best_ask = NewBest}};
         {NewAsk, NewBid} ->
-            binance:best_bid_updated(Pair, NewBid),
-            binance:best_ask_updated(Pair, NewAsk),
+            AskVol = ets:lookup_element(AsksEts, NewAsk, 2),
+            cryptoring_amqp_exchange:publish_order_top(ask, Pair, NewAsk, AskVol),
+
+            BidVol = ets:lookup_element(BidsEts, NewBid, 2),
+            cryptoring_amqp_exchange:publish_order_top(ask, Pair, NewBid, BidVol),
+
             {noreply, StateUpd#state{
                         best_ask = NewAsk,
                         best_bid = NewBid

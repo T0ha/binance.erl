@@ -8,7 +8,8 @@
     stdlib,
     cowlib,
     lager,
-    gun
+    gun,
+    cryptoring_amqp
    ]},
   {env,[]},
   {modules, []},

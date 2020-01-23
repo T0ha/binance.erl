@@ -4,19 +4,18 @@
 %
 % API endpoints
 % Public
--define(TICKER, "/api/v3/ticker/price").
--define(VOL24, "return24hVolume").
+-define(TICKER, "/api/v3/ticker/24hr").
 -define(ORDER_BOOK, "/api/v3/depth").
--define(TRADE_HISTORY, "returnTradeHistory").
--define(CHART_DATA, "returnChartData").
--define(CURRENCIES, "returnCurrencies").
+-define(TRADE_HISTORY, "/api/v3/trades").
+-define(CHART_DATA, "/api/v3/klines").
+-define(CURRENCIES, "/api/v3/exchangeInfo").
 
 % Private
--define(BALANCES, "returnCompleteBalances").
--define(OPEN_ORDERS, "returnOpenOrders").
--define(ORDER_STATUS, "returnOrderStatus").
--define(BUY, "buy").
--define(SELL, "sell").
+-define(BALANCES, "/sapi/v1/capital/config/getall").
+-define(OPEN_ORDERS, "/api/v3/openOrders").
+-define(ORDER_STATUS, "/api/v3/order").
+-define(BUY, "/api/v3/order").
+-define(SELL, "/api/v3/order").
 
 
 -record(connection, {

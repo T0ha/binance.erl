@@ -64,8 +64,8 @@ init([]) ->
               {'http_public', {'binance_http_public', start_link, []},
               Restart, Shutdown, Type, ['binance_http_public']},
 
-              %{'http_private', {'binance_http_private', start_link, []},
-              %Restart, Shutdown, Type, ['binance_http_private']},
+              {'http_private', {'binance_http_private', start_link, []},
+              Restart, Shutdown, Type, ['binance_http_private']},
 
               {'binance', {'binance', start_link, []},
               Restart, Shutdown, Type, ['binance']},

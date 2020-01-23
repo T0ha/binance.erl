@@ -44,6 +44,7 @@ start_link() ->
 
 subscribe(Pair) ->
     gen_server:cast(?SERVER, {subscribe, string:lowercase(Pair)}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================

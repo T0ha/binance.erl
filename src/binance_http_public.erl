@@ -15,9 +15,8 @@
 -export([
          start_link/0,
          ticker/0,
-         vol24/0,
          order_book/1, order_book/2,
-         trade_history/1, trade_history/3,
+         trade_history/1, trade_history/2,
          chart_data/4,
          currencies/0
         ]).
@@ -50,9 +49,6 @@ start_link() ->
 ticker() ->
     gen_server:call(?SERVER, {get, ?TICKER, []}).
 
-vol24() ->
-    gen_server:call(?SERVER, {get, ?VOL24, []}).
-
 order_book(Pair) ->
     order_book(Pair, 50).
 
@@ -68,15 +64,12 @@ trade_history(Pair) ->
     gen_server:call(?SERVER, {get, ?TRADE_HISTORY, [
                                                     {"symbol", Pair}
                                                    ]}).
-trade_history(Pair, Start, End) when is_integer(Start) ->
-    trade_history(Pair, integer_to_binary(Start), End);
-trade_history(Pair, Start, End) when is_integer(End) ->
-    trade_history(Pair, Start, integer_to_binary(End));
-trade_history(Pair, Start, End) ->
+trade_history(Pair, Limit) when is_integer(Limit) ->
+    trade_history(Pair, integer_to_binary(Limit));
+trade_history(Pair, Limit) ->
     gen_server:call(?SERVER, {get, ?TRADE_HISTORY, [
                                                     {"symbol", Pair},
-                                                    {"start", Start},
-                                                    {"end", End}
+                                                    {"limit", Limit}
                                                    ]}).
 
 chart_data(Pair, Period, Start, End) when is_integer(Period) ->
@@ -88,12 +81,13 @@ chart_data(Pair, Period, Start, End) when is_integer(End) ->
 chart_data(Pair, Period, Start, End) ->
     gen_server:call(?SERVER, {get, ?CHART_DATA, [
                                                     {"symbol", Pair},
-                                                    {"period", Period},
-                                                    {"start", Start},
-                                                    {"end", End}
+                                                    {"interval", Period},
+                                                    {"startTime", Start},
+                                                    {"endTime", End}
                                                    ]}).
 currencies() ->
-    gen_server:call(?SERVER, {get, ?CURRENCIES, []}).
+    #{<<"symbols">> := Sym} = gen_server:call(?SERVER, {get, ?CURRENCIES, []}),
+    Sym.
 
 %%%===================================================================
 %%% gen_server callbacks
