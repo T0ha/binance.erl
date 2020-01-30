@@ -23,6 +23,12 @@
          subscribe_pair/1
         ]).
 
+% Internal exports
+-export([
+         pair_to_binance/1,
+         pair_from_binance/1
+        ]).
+
 -define(SERVER, ?MODULE).
 
 -include("exchange.hrl").
@@ -75,3 +81,11 @@ subscribe_pair(Pair) ->
 pair_to_binance(Pair) ->
     [From, To] = binary:split(Pair, <<"_">>),
     <<To/bytes, From/bytes>>.
+
+pair_from_binance(<<To:3/bytes, From:3/bytes>>) ->
+    <<From/bytes, "_", To/bytes>>;
+pair_from_binance(<<To:4/bytes, From:3/bytes>>) ->
+    <<From/bytes, "_", To/bytes>>;
+pair_from_binance(Pair) ->
+    lager:error("Unexpected pair: ~p", [Pair]),
+    Pair.

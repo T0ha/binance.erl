@@ -248,18 +248,22 @@ handle_depth_command(#{<<"s">> := Pair,
             {noreply, StateUpd};
         {BestAsk, NewBest} ->
             Vol = ets:lookup_element(BidsEts, NewBest, 2),
-            cryptoring_amqp_exchange:publish_order_top(bid, Pair, NewBest, Vol),
+            PairMQ = binance:pair_from_binance(Pair),
+            cryptoring_amqp_exchange:publish_order_top(bid, PairMQ, NewBest, Vol),
             {noreply, StateUpd#state{best_bid = NewBest}};
         {NewBest, BestBid} ->
             Vol = ets:lookup_element(AsksEts, NewBest, 2),
-            cryptoring_amqp_exchange:publish_order_top(ask, Pair, NewBest, Vol),
+            PairMQ = binance:pair_from_binance(Pair),
+            cryptoring_amqp_exchange:publish_order_top(ask, PairMQ, NewBest, Vol),
             {noreply, StateUpd#state{best_ask = NewBest}};
         {NewAsk, NewBid} ->
+            PairMQ = binance:pair_from_binance(Pair),
+
             AskVol = ets:lookup_element(AsksEts, NewAsk, 2),
-            cryptoring_amqp_exchange:publish_order_top(ask, Pair, NewAsk, AskVol),
+            cryptoring_amqp_exchange:publish_order_top(ask, PairMQ, NewAsk, AskVol),
 
             BidVol = ets:lookup_element(BidsEts, NewBid, 2),
-            cryptoring_amqp_exchange:publish_order_top(ask, Pair, NewBid, BidVol),
+            cryptoring_amqp_exchange:publish_order_top(ask, PairMQ, NewBid, BidVol),
 
             {noreply, StateUpd#state{
                         best_ask = NewAsk,
