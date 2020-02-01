@@ -48,7 +48,7 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 balances() ->
-    gen_server:call(?SERVER, {get, ?BALANCES, []}).
+    gen_server:call(?SERVER, {get, ?BALANCES, []}, infinity).
 
 open_orders() ->
     gen_server:call(?SERVER, {get, ?OPEN_ORDERS, []}).
