@@ -5,6 +5,11 @@
    {secret, "BINANCE_SECRET_KEY"}
   ]
  },
+ {amqp_client, [
+                {username, <<"cryptoring">>},
+                {password, <<"cryptoring">>},
+                {virtual_host, <<"cryptoring">>}
+               ]},
  {lager,
   [
    {log_root, "log"},
