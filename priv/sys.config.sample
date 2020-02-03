@@ -1,0 +1,19 @@
+[
+ {binance,
+  [
+   {key, "BINANCE_API_KEY"},
+   {secret, "BINANCE_SECRET_KEY"}
+  ]
+ },
+ {lager,
+  [
+   {log_root, "log"},
+   {handlers, [
+               {lager_console_backend, info},
+               {lager_file_backend, [{file, "error.log"}, {level, error}]},
+               {lager_file_backend, [{file, "info.log"}, {level, info}]},
+               {lager_file_backend, [{file, "debug.log"}, {level, debug}]}
+              ]}
+  ]}
+].
+
