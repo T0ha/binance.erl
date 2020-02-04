@@ -48,48 +48,64 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 balances() ->
-    gen_server:call(?SERVER, {get, ?BALANCES, []}, infinity).
+    get(?BALANCES, []).
+
 
 open_orders() ->
-    gen_server:call(?SERVER, {get, ?OPEN_ORDERS, []}).
+    get(?OPEN_ORDERS, []).
 
 open_orders(Pair) ->
-    gen_server:call(?SERVER, {get, ?OPEN_ORDERS, [{"symbol", Pair}]}).
+    get(?OPEN_ORDERS, [{"symbol", Pair}]).
 
 order_status(Pair, OrderId) ->
-    gen_server:call(?SERVER, {get, ?ORDER_STATUS, [
-                                                   {"orderId", OrderId},
-                                                   {"symbol", Pair}
-                                                  ]}).
+    get(?ORDER_STATUS, [
+                        {"orderId", OrderId},
+                        {"symbol", Pair}
+                       ]).
+
+get(Method, Args) ->
+    case gen_server:call(?SERVER, {get, ?BALANCES, []}, infinity) of
+        recurse ->
+            get(Method, Args);
+        {ok, Reply} ->
+            Reply
+    end.
 
 buy(Pair, Price, Amount) when is_float(Price) ->
     buy(Pair, float_to_bin(Price), Amount);
 buy(Pair, Price, Amount) when is_float(Amount) ->
     buy(Pair, Price, float_to_bin(Amount));
 buy(Pair, Price, Amount) ->
-    gen_server:call(?SERVER, {post, ?BUY, [
-                                           {"price", Price},
-                                           {"side", "BUY"},
-                                           {"type", "LIMIT"},
-                                           {"quantity", Amount},
-                                           {"timeInForce", "GTC"},
-                                           {"symbol", Pair}
-                                          ]}, infinity).
+    post(?BUY, [
+                {"price", Price},
+                {"side", "BUY"},
+                {"type", "LIMIT"},
+                {"quantity", Amount},
+                {"timeInForce", "GTC"},
+                {"symbol", Pair}
+               ]).
 
 sell(Pair, Price, Amount) when is_float(Price) ->
     sell(Pair, float_to_bin(Price), Amount);
 sell(Pair, Price, Amount) when is_float(Amount) ->
     sell(Pair, Price, float_to_bin(Amount));
 sell(Pair, Price, Amount) ->
-    gen_server:call(?SERVER, {post, ?SELL, [
-                                           {"price", Price},
-                                           {"side", "SELL"},
-                                           {"type", "LIMIT"},
-                                           {"quantity", Amount},
-                                           {"timeInForce", "GTC"},
-                                           {"symbol", Pair}
-                                          ]}, infinity).
+    post(?SELL, [
+                 {"price", Price},
+                 {"side", "SELL"},
+                 {"type", "LIMIT"},
+                 {"quantity", Amount},
+                 {"timeInForce", "GTC"},
+                 {"symbol", Pair}
+                ]).
 
+post(Method, Args) ->
+    case gen_server:call(?SERVER, {post, ?BALANCES, []}, infinity) of
+        recurse ->
+            get(Method, Args);
+        {ok, Reply} ->
+            Reply
+    end.
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -147,10 +163,8 @@ handle_call({get, Method, Params},
     QS = api_url(Params, Secret),
     lager:debug("QS: ~p", [QS]),
     Ref = gun:get(Connection, Method ++ "?" ++ QS, Headers),
-    {response, nofin, _, _Headers} = gun:await(Connection, Ref),
-    {ok, Data} = gun:await_body(Connection, Ref),
-    Json = jsx:decode(Data, [return_maps]),
-    {reply, Json, State};
+    Reply = handle_responce(Connection, Ref, gun:await(Connection, Ref)),
+    {reply, Reply, State};
 handle_call({post, Method, Params},
             _From,
             #connection{
@@ -161,10 +175,8 @@ handle_call({post, Method, Params},
     QS = api_url(Params, Secret),
     lager:debug("QS: ~p", [QS]),
     Ref = gun:post(Connection, Method, Headers, QS),
-    {response, nofin, _, _Headers} = gun:await(Connection, Ref),
-    {ok, Data} = gun:await_body(Connection, Ref),
-    Json = jsx:decode(Data, [return_maps]),
-    {reply, Json, State};
+    Reply = handle_responce(Connection, Ref, gun:await(Connection, Ref)),
+    {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -274,3 +286,23 @@ bin_to_hexstr(Data) ->
 
 float_to_bin(Float) ->
     float_to_binary(Float, [{decimals, 10}, compact]).
+
+handle_responce(Connection, Ref, {response, nofin, Code, _Headers}) ->
+    handle_body(gun:await_body(Connection, Ref));
+handle_responce(_Connection, _Ref, {error, {_, close}}) ->
+    recurse;
+handle_responce(_Connection, _Ref, {error, E}) ->
+    {ok, #{<<"error">> => E}}.
+
+
+handle_body({ok, Body}) ->
+    Json = try
+               jsx:decode(Body, [return_maps])
+           catch
+               _:_ ->
+                   #{<<"error">> => <<"Malformed Json">>}
+           end,
+    {ok, Json};
+handle_body({error, Error}) ->
+    Json = #{<<"error">> => Error},
+    {ok, Json}. 
