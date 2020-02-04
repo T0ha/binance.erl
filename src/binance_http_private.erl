@@ -74,7 +74,7 @@ buy(Pair, Price, Amount) ->
                                            {"quantity", Amount},
                                            {"timeInForce", "GTC"},
                                            {"symbol", Pair}
-                                          ]}).
+                                          ]}, infinity).
 
 sell(Pair, Price, Amount) when is_float(Price) ->
     sell(Pair, float_to_bin(Price), Amount);
@@ -88,7 +88,7 @@ sell(Pair, Price, Amount) ->
                                            {"quantity", Amount},
                                            {"timeInForce", "GTC"},
                                            {"symbol", Pair}
-                                          ]}).
+                                          ]}, infinity).
 
 %%%===================================================================
 %%% gen_server callbacks
