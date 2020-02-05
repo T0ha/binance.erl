@@ -64,7 +64,7 @@ order_status(Pair, OrderId) ->
                        ]).
 
 get(Method, Args) ->
-    case gen_server:call(?SERVER, {get, ?BALANCES, []}, infinity) of
+    case gen_server:call(?SERVER, {get, Method, Args}, infinity) of
         recurse ->
             get(Method, Args);
         {ok, Reply} ->
@@ -100,9 +100,9 @@ sell(Pair, Price, Amount) ->
                 ]).
 
 post(Method, Args) ->
-    case gen_server:call(?SERVER, {post, ?BALANCES, []}, infinity) of
+    case gen_server:call(?SERVER, {post, Method, Args}, infinity) of
         recurse ->
-            get(Method, Args);
+            post(Method, Args);
         {ok, Reply} ->
             Reply
     end.
