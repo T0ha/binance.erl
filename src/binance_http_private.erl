@@ -212,6 +212,11 @@ handle_info({gun_down, Connection, http, Reason, _KilledStreams},
     lager:info("Publick HTTP ~p disconnected with reason ~p, reconnecting", [Connection, Reason]),
     %{ok, NewConnection} = connect(),
     {noreply, State#connection{connection = Connection}};
+handle_info({gun_down, Connection, http, Reason, _KilledStreams, _UnprocessedStreams},
+            #connection{connection = Connection} = State) ->
+    lager:info("Publick HTTP ~p disconnected with reason ~p, reconnecting", [Connection, Reason]),
+    %{ok, NewConnection} = connect(),
+    {noreply, State#connection{connection = Connection}};
 handle_info({gun_responce, Connection, Ref, fin, _Status, _Headers},
             #connection{
                connection = Connection,
