@@ -292,12 +292,12 @@ bin_to_hexstr(Data) ->
 float_to_bin(Float) ->
     float_to_binary(Float, [{decimals, 10}, compact]).
 
-handle_responce(Connection, Ref, {response, nofin, Code, _Headers}) ->
+handle_responce(Connection, Ref, {response, nofin, _Code, _Headers}) ->
     handle_body(gun:await_body(Connection, Ref));
-handle_responce(_Connection, _Ref, {error, {_, close}}) ->
+handle_responce(_Connection, _Ref, {error, {stream_error, closed}}) ->
     recurse;
 handle_responce(_Connection, _Ref, {error, E}) ->
-    {ok, #{<<"error">> => E}}.
+    {ok, #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))}}.
 
 
 handle_body({ok, Body}) ->
