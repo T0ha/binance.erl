@@ -57,17 +57,22 @@ sell(Pair, Price, Amount) ->
     binance_http_private:sell(pair_to_binance(Pair), Price, Amount).
 
 balances() ->
-    Balancies = binance_http_private:balances(),
-    lists:foldl(fun(#{<<"coin">> := Coin, 
-                      <<"free">> := Free,
-                      <<"locked">> := Locked},
-                    Acc) ->
-                        Acc#{Coin => #{<<"available">> => binary_to_float(Free),
-                                       <<"onOrders">> => binary_to_float(Locked)
-                                       }}
-                end,
-                #{},
-                Balancies).
+    case binance_http_private:balances() of
+        #{<<"error">> := E} = Error ->
+            lager:warning("Error getting balancies: ~s", [E]),
+            Error;
+        Balancies ->
+            lists:foldl(fun(#{<<"coin">> := Coin, 
+                              <<"free">> := Free,
+                              <<"locked">> := Locked},
+                            Acc) ->
+                                Acc#{Coin => #{<<"available">> => binary_to_float(Free),
+                                               <<"onOrders">> => binary_to_float(Locked)
+                                              }}
+                        end,
+                        #{},
+                        Balancies)
+    end.
 
 subscribe_pair(Pair) ->
     PairB = pair_to_binance(Pair),
