@@ -296,6 +296,8 @@ handle_responce(Connection, Ref, {response, nofin, _Code, _Headers}) ->
     handle_body(gun:await_body(Connection, Ref));
 handle_responce(_Connection, _Ref, {error, {stream_error, closed}}) ->
     recurse;
+handle_responce(_Connection, _Ref, {error, {closed, _}}) ->
+    recurse;
 handle_responce(_Connection, _Ref, {error, timeout}) ->
     recurse;
 handle_responce(_Connection, _Ref, {error, E}) ->
