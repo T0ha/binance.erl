@@ -59,8 +59,8 @@ sell(Pair, Price, Amount) ->
 balances() ->
     case binance_http_private:balances() of
         #{<<"error">> := E} = Error ->
-            lager:warning("Error getting balancies: ~s", [E]),
-            Error;
+            lager:warning("Error getting balancies: ~p", [E]),
+            #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))};
         Balancies ->
             lists:foldl(fun(#{<<"coin">> := Coin, 
                               <<"free">> := Free,
