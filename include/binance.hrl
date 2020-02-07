@@ -24,7 +24,8 @@
           key = <<>> :: binary(),
           secret = <<>> :: binary(),
           from :: pid() | undefined,
-          ref :: reference() | undefined
+          ref :: reference() | undefined,
+          subscriptions = [] :: [map()]
          }).
 
 -record(pair, {
