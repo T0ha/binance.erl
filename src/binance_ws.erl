@@ -105,13 +105,8 @@ handle_cast({subscribe, Pair},
                connection = Connection,
                subscriptions = Subscribtions
               } = State) ->
-    Subscribe = #{
-      id => 1,
-      method => <<"SUBSCRIBE">>,
-      params => [ <<Pair/bytes, "@depth@100ms">> ]
-     },
-    gun:ws_send(Connection, {text, jsx:encode(Subscribe)}),
-    {noreply, State#connection{subscriptions = [Pair | Subscribtions]}};
+    do_subscribe(Connection, Pair),
+    {noreply, State#connection{subscriptions = sets:add_element(Pair, Subscribtions)}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -135,7 +130,10 @@ handle_info({gun_upgrade, Connection, Ref, _Protocols, _Headers},
                subscriptions = Subscribtions
               } = State) ->
     lager:info("WS connected ~p", [Ref]),
-    lists:foreach(fun subscribe/1, Subscribtions),
+    lists:foreach(fun(Pair) ->
+                          do_subscribe(Connection, Pair)
+                  end,
+                  sets:to_list(Subscribtions)),
     {noreply, State#connection{ref = Ref}, ?HEATBREAT_TIMEOUT};
 handle_info({gun_ws, Connection, Ref, {text, <<"[1010]">>}},
             #connection{connection = Connection, ref = Ref} = State) ->
@@ -185,3 +183,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+do_subscribe(Connection, Pair) ->
+    Subscribe = #{
+      id => 1,
+      method => <<"SUBSCRIBE">>,
+      params => [ <<Pair/bytes, "@depth@100ms">> ]
+     },
+    gun:ws_send(Connection, {text, jsx:encode(Subscribe)}).
