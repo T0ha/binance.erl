@@ -61,7 +61,7 @@ balances() ->
         #{<<"error">> := E} ->
             lager:warning("Error getting balancies: ~p", [E]),
             #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))};
-        Balancies ->
+        Balancies when is_list(Balancies) ->
             lists:foldl(fun(#{<<"coin">> := Coin, 
                               <<"free">> := Free,
                               <<"locked">> := Locked},
@@ -74,7 +74,11 @@ balances() ->
                                 Acc
                         end,
                         #{},
-                        Balancies)
+                        Balancies);
+        E ->
+            lager:warning("Error getting balancies: ~p", [E]),
+            #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))}
+
     end.
 
 subscribe_pair(Pair) ->
