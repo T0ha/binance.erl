@@ -58,7 +58,7 @@ sell(Pair, Price, Amount) ->
 
 balances() ->
     case binance_http_private:balances() of
-        #{<<"error">> := E} = Error ->
+        #{<<"error">> := E} ->
             lager:warning("Error getting balancies: ~p", [E]),
             #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))};
         Balancies ->
@@ -68,7 +68,10 @@ balances() ->
                             Acc) ->
                                 Acc#{Coin => #{<<"available">> => binary_to_float(Free),
                                                <<"onOrders">> => binary_to_float(Locked)
-                                              }}
+                                              }};
+                           (Any, Acc) ->
+                                lager:warning("Wrong coin data: ~p", [Any]),
+                                Acc
                         end,
                         #{},
                         Balancies)
