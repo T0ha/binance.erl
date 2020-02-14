@@ -51,16 +51,20 @@ start_link() ->
 %%% cryptoring_amqp_exchange callbacks
 %%%===================================================================
 buy(Pair, Price, Amount) ->
-    binance_http_private:buy(pair_to_binance(Pair), Price, Amount).
+    Resp = binance_http_private:buy(pair_to_binance(Pair), Price, Amount),
+    cryptoring_amqp_log:log(<<"order">>, Resp).
 
 sell(Pair, Price, Amount) ->
-    binance_http_private:sell(pair_to_binance(Pair), Price, Amount).
+    Resp = binance_http_private:sell(pair_to_binance(Pair), Price, Amount),
+    cryptoring_amqp_log:log(<<"order">>, Resp).
 
 balances() ->
     case binance_http_private:balances() of
         #{<<"error">> := E} ->
             lager:warning("Error getting balancies: ~p", [E]),
-            #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))};
+            Resp = #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))},
+            cryptoring_amqp_log:log(<<"error">>, Resp),
+            Resp;
         Balancies when is_list(Balancies) ->
             lists:foldl(fun(#{<<"coin">> := Coin, 
                               <<"free">> := Free,
@@ -77,7 +81,9 @@ balances() ->
                         Balancies);
         E ->
             lager:warning("Error getting balancies: ~p", [E]),
-            #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))}
+            Resp = #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))},
+            cryptoring_amqp_log:log(<<"error">>, Resp),
+            Resp
 
     end.
 
