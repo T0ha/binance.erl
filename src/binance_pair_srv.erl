@@ -218,6 +218,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 handle_depth_command(#{<<"s">> := Pair,
+                       <<"b">> := _Bid,
+                       <<"B">> := _BidQty,
+                       <<"a">> := _Ask,
+                       <<"A">> := _AskQty,
+                       <<"u">> := _Last
+                      } = Update,
+                     State) ->
+    lager:debug("Best bid or ask update for ~p: ~p", [Pair, Update]),
+    StateUpd = maybe_update_state_and_notify(Update, State),
+    {noreply, StateUpd};
+handle_depth_command(#{<<"s">> := Pair,
                        <<"b">> := Bids,
                        <<"a">> := Asks,
                        <<"U">> := First,
@@ -282,3 +293,42 @@ update_depth(Table, Price, 0.0) ->
     ets:delete(Table, Price);
 update_depth(Table, Price, Volume) ->
     ets:insert(Table, {Price, Volume}).
+
+maybe_update_state_and_notify(#{<<"a">> := Ask} = Update, State) when is_binary(Ask) ->
+    maybe_update_state_and_notify(Update#{<<"a">> => binary_to_float(Ask)}, State);
+maybe_update_state_and_notify(#{<<"b">> := Bid} = Update, State) when is_binary(Bid) ->
+    maybe_update_state_and_notify(Update#{<<"b">> => binary_to_float(Bid)}, State);
+maybe_update_state_and_notify(#{<<"A">> := AskQty} = Update, State) when is_binary(AskQty) ->
+    maybe_update_state_and_notify(Update#{<<"A">> => binary_to_float(AskQty)}, State);
+maybe_update_state_and_notify(#{<<"B">> := BidQty} = Update, State) when is_binary(BidQty) ->
+    maybe_update_state_and_notify(Update#{<<"B">> => binary_to_float(BidQty)}, State);
+maybe_update_state_and_notify(#{<<"a">> := Ask
+                               ,<<"A">> := AskQty
+                               ,<<"s">> := Pair
+                               ,<<"u">> := Upd
+                               },
+                              #state{
+                                 best_ask = BestAsk
+                              } = State) when Ask /= BestAsk ->
+            PairMQ = binance:pair_from_binance(Pair),
+            cryptoring_amqp_exchange:publish_order_top(ask, PairMQ, Ask, AskQty),
+            State#state{
+              best_ask = Ask,
+              last_update = Upd
+             };
+maybe_update_state_and_notify(#{<<"b">> := Bid
+                               ,<<"B">> := BidQty
+                               ,<<"s">> := Pair
+                               ,<<"u">> := Upd
+                               },
+                              #state{
+                                 best_ask = BestBid
+                              } = State) when Bid /= BestBid ->
+            PairMQ = binance:pair_from_binance(Pair),
+            cryptoring_amqp_exchange:publish_order_top(bid, PairMQ, Bid, BidQty),
+            State#state{
+              best_ask = Bid,
+              last_update = Upd
+             };
+maybe_update_state_and_notify(#{<<"u">> := Upd}, State) ->
+    State#state{last_update = Upd}.

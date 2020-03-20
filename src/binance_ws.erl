@@ -187,6 +187,9 @@ do_subscribe(Connection, Pair) ->
     Subscribe = #{
       id => 1,
       method => <<"SUBSCRIBE">>,
-      params => [ <<Pair/bytes, "@depth@100ms">> ]
+      params => [ <<Pair/bytes,
+                    "@bookTicker">>  
+      %, <<Pair/bytes, "@depth@100ms">> 
+                ]
      },
     gun:ws_send(Connection, {text, jsx:encode(Subscribe)}).
