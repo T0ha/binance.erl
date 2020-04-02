@@ -20,7 +20,8 @@
          buy/3,
          sell/3,
          balances/0,
-         subscribe_pair/1
+         subscribe_pair/1,
+         open_orders/0
         ]).
 
 % Internal exports
@@ -87,6 +88,36 @@ balances() ->
 
     end.
 
+open_orders() ->
+    case binance_http_private:open_orders() of
+        #{<<"error">> := E} ->
+            lager:warning("Error getting balancies: ~p", [E]),
+            Resp = #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))},
+            cryptoring_amqp_log:log(<<"error">>, Resp),
+            Resp;
+        Orders when is_list(Orders) ->
+            [#{<<"pair">> => pair_from_binance(Pair)
+               ,<<"direction">> => string:lowercase(Direction)
+               ,<<"price">> => binary_to_float(Price)
+               ,<<"amount">> => binary_to_float(Amount)
+               %,<<"total">> => binary_to_float(Total)
+               ,<<"id">> => Id
+               ,<<"timestamp">> => TS
+              } || #{<<"side">> := Direction
+                     ,<<"symbol">> := Pair
+                     ,<<"price">> := Price
+                     ,<<"origQty">> := Amount
+                     ,<<"orderId">> := Id
+                     %,<<"total">> := Total
+                     ,<<"time">> := TS
+                    } <- Orders];
+        E ->
+            lager:warning("Error getting balancies: ~p", [E]),
+            Resp = #{<<"error">> => iolist_to_binary(io_lib:format("~p", [E]))},
+            cryptoring_amqp_log:log(<<"error">>, Resp),
+            Resp
+
+    end.
 subscribe_pair(Pair) ->
     PairB = pair_to_binance(Pair),
     binance_pair_sup:add_pair(PairB),

@@ -292,7 +292,8 @@ bin_to_hexstr(Data) ->
 float_to_bin(Float) ->
     float_to_binary(Float, [{decimals, 10}, compact]).
 
-handle_responce(Connection, Ref, {response, nofin, _Code, _Headers}) ->
+handle_responce(Connection, Ref, {response, nofin, _Code, Headers}) ->
+    lager:debug("Headers: ~p", [Headers]),
     handle_body(gun:await_body(Connection, Ref));
 handle_responce(_Connection, _Ref, {error, {stream_error, closed}}) ->
     recurse;
