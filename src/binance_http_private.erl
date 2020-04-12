@@ -100,12 +100,17 @@ sell(Pair, Price, Amount) ->
                 ]).
 
 post(Method, Args) ->
-    case gen_server:call(?SERVER, {post, Method, Args}, infinity) of
-        recurse ->
-            post(Method, Args);
-        {ok, Reply} ->
-            Reply
-    end.
+    {Delay, Reply} = timer:tc(
+                       fun() ->
+                               case gen_server:call(?SERVER, {post, Method, Args}, infinity) of
+                                   recurse ->
+                                       post(Method, Args);
+                                   {ok, Reply} ->
+                                       Reply
+                               end
+                       end),
+    Reply#{<<"delay">> => Delay}.
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
