@@ -16,12 +16,13 @@
         ]).
 
 %% cryptoring_amqp_exchange callbacks
--export([
-         buy/3,
-         sell/3,
-         balances/0,
-         subscribe_pair/1,
-         open_orders/0
+-export([buy/3
+        ,sell/3
+        ,balances/0
+        ,subscribe_pair/1
+        ,open_orders/0
+        ,asks/2
+        ,bids/2
         ]).
 
 % Internal exports
@@ -71,8 +72,13 @@ balances() ->
                               <<"free">> := Free,
                               <<"locked">> := Locked},
                             Acc) ->
-                                Acc#{Coin => #{<<"available">> => binary_to_float(Free),
-                                               <<"onOrders">> => binary_to_float(Locked)
+                                Available = binary_to_float(Free),
+                                OnOrders = binary_to_float(Locked),
+
+                                BTCValue = price(Coin) * (Available + OnOrders),
+                                Acc#{Coin => #{<<"available">> => Available,
+                                               <<"onOrders">> => OnOrders,
+                                               <<"btcValue">> => BTCValue
                                               }};
                            (Any, Acc) ->
                                 lager:warning("Wrong coin data: ~p", [Any]),
@@ -120,8 +126,29 @@ open_orders() ->
     end.
 subscribe_pair(Pair) ->
     PairB = pair_to_binance(Pair),
-    binance_pair_sup:add_pair(PairB),
-    binance_ws:subscribe(PairB).
+    binance_pair_sup:add_pair(PairB).
+
+asks(Pair, Limit) ->
+    try binance_pair_srv:asks(pair_to_binance(Pair), Limit) of
+        Result ->
+            [#{<<"price">> => Price
+              ,<<"amount">> => Amount
+              } || {Price, Amount} <- Result]
+    catch
+        _:_ -> 
+            []
+    end.
+            
+bids(Pair, Limit) ->
+    try binance_pair_srv:bids(pair_to_binance(Pair), Limit) of
+        Result ->
+            [#{<<"price">> => Price
+              ,<<"amount">> => Amount
+              } || {Price, Amount} <- Result]
+    catch
+        _:_ -> 
+            []
+    end.
 
                         
 %%%===================================================================
@@ -138,3 +165,9 @@ pair_from_binance(<<To:4/bytes, From:3/bytes>>) ->
 pair_from_binance(Pair) ->
     lager:error("Unexpected pair: ~p", [Pair]),
     Pair.
+
+price(Coin) ->
+    case bids(<<"BTC_", Coin/bytes>>, 1) of
+        [#{<<"price">> := Price}] -> Price;
+        [] -> 0.0
+    end.
