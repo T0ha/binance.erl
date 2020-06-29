@@ -13,9 +13,7 @@
 % Private
 -define(BALANCES, "/sapi/v1/capital/config/getall").
 -define(OPEN_ORDERS, "/api/v3/openOrders").
--define(ORDER_STATUS, "/api/v3/order").
--define(BUY, "/api/v3/order").
--define(SELL, "/api/v3/order").
+-define(ORDER, "/api/v3/order").
 
 
 -record(connection, {

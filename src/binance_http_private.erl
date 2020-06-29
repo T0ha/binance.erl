@@ -19,7 +19,8 @@
          open_orders/1,
          order_status/2,
          buy/3,
-         sell/3
+         sell/3,
+         cancel_order/2
         ]).
 
 %% gen_server callbacks
@@ -58,10 +59,15 @@ open_orders(Pair) ->
     get(?OPEN_ORDERS, [{"symbol", Pair}]).
 
 order_status(Pair, OrderId) ->
-    get(?ORDER_STATUS, [
+    get(?ORDER, [
                         {"orderId", OrderId},
                         {"symbol", Pair}
                        ]).
+
+cancel_order(Pair, OrderId) ->
+    delete(?ORDER, [{"orderId", OrderId}
+                   ,{"symbol", Pair}
+                   ]).
 
 get(Method, Args) ->
     case gen_server:call(?SERVER, {get, Method, Args}, infinity) of
@@ -71,12 +77,19 @@ get(Method, Args) ->
             Reply
     end.
 
+delete(Method, Args) ->
+    case gen_server:call(?SERVER, {delete, Method, Args}, infinity) of
+        recurse ->
+            get(Method, Args);
+        {ok, Reply} ->
+            Reply
+    end.
 buy(Pair, Price, Amount) when is_float(Price) ->
     buy(Pair, float_to_bin(Price), Amount);
 buy(Pair, Price, Amount) when is_float(Amount) ->
     buy(Pair, Price, float_to_bin(Amount));
 buy(Pair, Price, Amount) ->
-    post(?BUY, [
+    post(?ORDER, [
                 {"price", Price},
                 {"side", "BUY"},
                 {"type", "LIMIT"},
@@ -90,7 +103,7 @@ sell(Pair, Price, Amount) when is_float(Price) ->
 sell(Pair, Price, Amount) when is_float(Amount) ->
     sell(Pair, Price, float_to_bin(Amount));
 sell(Pair, Price, Amount) ->
-    post(?SELL, [
+    post(?ORDER, [
                  {"price", Price},
                  {"side", "SELL"},
                  {"type", "LIMIT"},
@@ -182,6 +195,18 @@ handle_call({post, Method, Params},
     Ref = gun:post(Connection, Method, Headers, QS),
     Reply = handle_responce(Connection, Ref, gun:await(Connection, Ref)),
     {reply, Reply, State};
+handle_call({delete, Method, Params},
+            _From,
+            #connection{
+               connection = Connection,
+               secret = Secret,
+               headers = Headers
+              } = State) ->
+    QS = api_url(Params, Secret),
+    lager:debug("QS: ~p", [QS]),
+    Ref = gun:delete(Connection, Method ++ "?" ++ QS, Headers),
+    Reply = handle_responce(Connection, Ref, gun:await(Connection, Ref)),
+    {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -234,16 +259,14 @@ handle_info({gun_responce, Connection, Ref, fin, _Status, _Headers},
 handle_info({gun_responce, Connection, Ref, nofin, _Status, _Headers},
             #connection{
                connection = Connection,
-               ref = Ref,
-               from = Pid
+               ref = Ref
               } = State) ->
     lager:info("HTTP responce recieved for ~p", [Ref]),
     {noreply, State};
 handle_info({gun_data, Connection, Ref, nofin, _Status, _Headers},
             #connection{
                connection = Connection,
-               ref = Ref,
-               from = Pid
+               ref = Ref
               } = State) ->
     lager:info("HTTP responce recieved for ~p", [Ref]),
     {noreply, State};

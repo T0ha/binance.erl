@@ -23,6 +23,7 @@
         ,open_orders/0
         ,asks/2
         ,bids/2
+        ,cancel_order/2
         ]).
 
 % Internal exports
@@ -150,6 +151,12 @@ bids(Pair, Limit) ->
             []
     end.
 
+cancel_order(Pair, OrderId) ->
+    Resp = binance_http_private:cancel_order(pair_to_binance(Pair),
+                                             integer_to_binary(OrderId)),
+
+    lager:info("cancel_order('~p') = ~p", [OrderId, Resp]),
+    cryptoring_amqp_log:log(<<"cancel_order">>, Resp#{<<"origOrderId">> => OrderId}).
                         
 %%%===================================================================
 %%% Internal functions
