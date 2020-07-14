@@ -173,6 +173,7 @@ pair_from_binance(Pair) ->
     lager:error("Unexpected pair: ~p", [Pair]),
     Pair.
 
+price(<<"BTC">>) -> 1.0;
 price(Coin) ->
     case bids(<<"BTC_", Coin/bytes>>, 1) of
         [#{<<"price">> := Price}] -> Price;
