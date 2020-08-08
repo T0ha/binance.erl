@@ -15,7 +15,9 @@
 %%====================================================================
 
 start(_StartType, _StartArgs) ->
-    binance_sup:start_link().
+    Ret = binance_sup:start_link(),
+    binance:sync(),
+    Ret.
 
 %%--------------------------------------------------------------------
 stop(_State) ->

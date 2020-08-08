@@ -24,6 +24,7 @@
         ,asks/2
         ,bids/2
         ,cancel_order/2
+        ,sync/0
         ]).
 
 % Internal exports
@@ -158,6 +159,10 @@ cancel_order(Pair, OrderId) ->
     lager:info("cancel_order('~p') = ~p", [OrderId, Resp]),
     cryptoring_amqp_log:log(<<"cancel_order">>, Resp#{<<"origOrderId">> => OrderId}).
                         
+sync() ->
+    #{<<"pairs">> := Pairs} = cryptoring_couchdb:fetch_config_doc("cryptoring"),
+    lists:foreach(fun subscribe_pair/1, Pairs).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
