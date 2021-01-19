@@ -11,7 +11,7 @@
   3},
  {<<"cryptoring_amqp">>,
   {git,"git@github.com:T0ha/cryptoring_amqp.git",
-       {ref,"512f56d51a841ef32917cbe2e1f06d0fab5c3b18"}},
+       {ref,"7d088b0f0e5b75227ed2556e4327572ee8438489"}},
   0},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"gun">>,{pkg,<<"gun">>,<<"1.3.1">>},0},

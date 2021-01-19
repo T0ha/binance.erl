@@ -73,8 +73,8 @@ balances() ->
                               <<"free">> := Free,
                               <<"locked">> := Locked},
                             Acc) ->
-                                Available = binary_to_float(Free),
-                                OnOrders = binary_to_float(Locked),
+                                Available = to_float(Free),
+                                OnOrders = to_float(Locked),
 
                                 BTCValue = price(Coin) * (Available + OnOrders),
                                 Acc#{Coin => #{<<"available">> => Available,
@@ -178,4 +178,12 @@ price(Coin) ->
     case bids(<<"BTC_", Coin/bytes>>, 1) of
         [#{<<"price">> := Price}] -> Price;
         [] -> 0.0
+    end.
+to_float(<<>>) -> 0.0;
+to_float(Bin) ->
+    try
+        binary_to_float(Bin)
+    catch
+        _:_ ->
+            float(binary_to_integer(Bin))
     end.
