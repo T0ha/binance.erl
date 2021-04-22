@@ -2,7 +2,7 @@ FROM erlang:22.3.2-alpine AS builder
 COPY . /root/binance
 WORKDIR /root/binance
 RUN apk add git bash
-RUN rebar3 do compile, release
+RUN rebar3 as docker do compile, release
 
 FROM alpine:latest
 WORKDIR /root
