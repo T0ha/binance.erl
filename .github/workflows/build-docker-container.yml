@@ -1,0 +1,69 @@
+name: Build Docker Image
+on:
+  push:
+    branches:
+      - master
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build_docker_image:
+    name: Build Image
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: SSH Agent init
+        uses: webfactory/ssh-agent@v0.5.2
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Getting deps from host
+        run: ./rebar3 get-deps
+
+      - name: Building and publishing an image
+        uses: docker/build-push-action@v1
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io
+          repository: ${{ github.repository }}
+          tag_with_ref: true
+          tag_with_sha: true
+
+  deploy_to_kubernetes:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-18.04
+    needs: build_docker_image
+    env:
+      RABBIT_USER: cryptoring
+      RABBIT_VHOST: "/"
+      COUCHDB_URL: "https://392550bc-ca75-4cde-8d0c-1b0126c80727-bluemix:ce44fad87976d433f3830521df8c1cc24e2a72e3026d8874b051344649436572@392550bc-ca75-4cde-8d0c-1b0126c80727-bluemix.cloudantnosqldb.appdomain.cloud"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Get docker tag
+        id: short_sha
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+
+      - name: Install Helm Package
+        uses: wahyd4/kubectl-helm-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+        with:
+          args: |
+            helm upgrade --install binance -n cryptoring ./ops/helmchart/ \
+            --set image.tag="sha-${{ steps.short_sha.outputs.sha_short }} \
+            --set RABBIT_USER=${{ env.RABBIT_USER }} \
+            --set RABBIT_PASSWORD=${{ secrets.RABBIT_PASSWORD }} \
+            --set RABBIT_VHOST=${{ env.RABBIT_VHOST }} \
+            --set COUCHDB_URL=${{ env.COUCHDB_URL }} \
+            --set COUCHDB_LOGIN=${{ secrets.COUCHDB_LOGIN }} \
+            --set COUCHDB_PASSWORD=${{ secrets.COUCHDB_PASSWORD }} \
+            --set API_KEY=${{ secrets.API_KEY }} \
+            --set API_SECRET=${{ secrets.API_SECRET }}
+

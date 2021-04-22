@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "binance.fullname" . }}
+  labels:
+    {{- include "binance.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "binance.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "binance.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "binance.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          livenessProbe:
+              exec: 
+                  command: 
+                      - "./bin/{{ include "binance.name" . }} ping"
+              initialDelaySeconds: 30
+              periodSeconds: 20
+          env:
+              - name: "RABBIT_USER"
+                valueFrom:
+                    secretKeyRef:
+                        key: RABBIT_USER
+                        name: {{ .Release.Name }}-auth
+
+              - name: "RABBIT_PASSWORD"
+                valueFrom:
+                    secretKeyRef:
+                        key: RABBIT_PASSWORD
+                        name: {{ .Release.Name }}-auth
+              - name: "RABBIT_VHOST"
+                value: "/"
+
+              - name: "COUCHDB_URL"
+                value: "https://392550bc-ca75-4cde-8d0c-1b0126c80727-bluemix:ce44fad87976d433f3830521df8c1cc24e2a72e3026d8874b051344649436572@392550bc-ca75-4cde-8d0c-1b0126c80727-bluemix.cloudantnosqldb.appdomain.cloud"
+              - name: "COUCHDB_LOGIN"
+                valueFrom:
+                    secretKeyRef:
+                        key: COUCHDB_LOGIN
+                        name: {{ .Release.Name }}-auth
+              - name: "COUCHDB_PASSWORD"
+                valueFrom:
+                    secretKeyRef:
+                        key: COUCHDB_PASSWORD
+                        name: {{ .Release.Name }}-auth
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

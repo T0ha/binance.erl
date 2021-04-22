@@ -7,9 +7,9 @@ RUN rebar3 do compile, release
 FROM alpine:latest
 WORKDIR /root
 RUN apk add ncurses
-RUN mkdir ssl
-COPY --from=builder /root/binance/priv/ssl/ca_certificate.pem ./ssl
-COPY --from=builder /root/binance/priv/ssl/client_certificate.pem ./ssl
-COPY --from=builder /root/binance/priv/ssl/client_key.pem ./ssl
-COPY --from=builder /root/binance/_build/default/rel/binance .
+#RUN mkdir ssl
+#COPY --from=builder /root/binance/priv/ssl/ca_certificate.pem ./ssl
+#COPY --from=builder /root/binance/priv/ssl/client_certificate.pem ./ssl
+#COPY --from=builder /root/binance/priv/ssl/client_key.pem ./ssl
+COPY --from=builder /root/binance/_build/docker/rel/binance .
 CMD ./bin/binance console
